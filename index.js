@@ -11,6 +11,7 @@ const shortUrls = {}; // Store short URLs in memory
 
 app.use(cors());
 app.use(bodyParser.urlencoded({ extended: false }));
+app.use(bodyParser.json());
 app.use('/public', express.static(`${process.cwd()}/public`));
 
 app.get('/', function(req, res) {
@@ -24,27 +25,44 @@ app.get('/api/hello', function(req, res) {
 
 app.post('/api/shorturl', (req, res) => {
   const { url } = req.body;
+
   // Check if the URL is valid by parsing it
+  let parsedUrl;
   try {
-    new URL(url);
+    parsedUrl = new URL(url);
   } catch (error) {
-    return res.status(400).json({ error: 'invalid url' });
+    return res.send({ error: 'invalid url' });
   }
 
-  // Generate a unique short URL
-  const shortUrl = generateShortUrl();
-  shortUrls[shortUrl] = url;
+    // Check if the URL has either http:// or https:// protocol
+  if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+    return res.send({ error: 'invalid url' });
+  }
+
+  // Extract the domain from the URL
+  const domain = new URL(url).hostname;
+
+  // Perform a DNS lookup to validate the domain
+  dns.lookup(domain, (err, address, family) => {
+    if (err) {
+      return res.send({ error: 'invalid url' });
+    }
+
+    // Generate a unique short URL
+    const shortUrl = generateShortUrl();
+    shortUrls[shortUrl] = url;
   
-  res.send({
-    original_url: url,
-    short_url: shortUrl,
+    res.send({
+      original_url: url,
+      short_url: shortUrl,
+    });
   });
 });
 
 app.get('/api/shorturl/:shortUrl', (req, res) => {
   const { shortUrl } = req.params;
 
-  // Check if the short URL exists
+  // Check if the short URL exists in the shortUrls object
   if (!shortUrls.hasOwnProperty(shortUrl)) {
     return res.status(404).send('Short URL not found');
   }
